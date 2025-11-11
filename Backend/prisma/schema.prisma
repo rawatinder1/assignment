@@ -4,12 +4,57 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
+
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Route {
+  id              Int      @id @default(autoincrement())
+  routeId         String
+  year            Int
+  vesselType      String
+  fuelType        String
+  fuelConsumption Int
+
+  distance	      Int
+
+  totalEmissions   Int
+  ghgIntensity     Float
+  isBaseline       Boolean  @default(false)
+}
+
+model ShipCompliance {
+  id        Int     @id @default(autoincrement())
+  shipId    String
+  year      Int
+  cbGco2eq  Float
+}
+
+model BankEntry {
+  id           Int     @id @default(autoincrement())
+  shipId       String
+  year         Int
+  amountGco2eq Float
+}
+
+model Pool {
+  id         Int      @id @default(autoincrement())
+  year       Int
+  createdAt  DateTime @default(now())
+  members    PoolMember[]
+}
+
+model PoolMember {
+  id        Int     @id @default(autoincrement())
+  poolId    Int
+  shipId    String
+  cbBefore  Float
+  cbAfter   Float
+  Pool      Pool    @relation(fields: [poolId], references: [id])
 }
