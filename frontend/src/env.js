@@ -16,7 +16,9 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    NEXT_PUBLIC_API_BASE_URL: z.string().url().default("http://localhost:3000"),
+    // Backend API URL - must be a valid URL
+    // Default: http://localhost:3000 for local development
+    NEXT_PUBLIC_API_BASE_URL: z.string().url(),
   },
 
   /**
@@ -25,7 +27,7 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000",
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

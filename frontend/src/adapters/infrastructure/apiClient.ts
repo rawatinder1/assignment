@@ -1,12 +1,15 @@
 // src/adapters/infrastructure/apiClient.ts
-import { env } from "@/env";
 import type { ApiClientPort } from "@/core/ports/ApiClientPort";
 import type { RouteEntity, RouteComparison } from "@/core/domain/RouteEntity";
 import type { ComplianceBalance, AdjustedComplianceBalance } from "@/core/domain/ComplianceEntity";
 import type { BankRecord, BankResult } from "@/core/domain/BankingEntity";
 import type { PoolResult } from "@/core/domain/PoolEntity";
 
-const API_BASE_URL = env.NEXT_PUBLIC_API_BASE_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+interface ApiError {
+  error?: string;
+}
 
 class ApiClient implements ApiClientPort {
   private async fetchApi<T>(
@@ -23,8 +26,8 @@ class ApiClient implements ApiClientPort {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(error.error || `API error: ${response.statusText}`);
+      const error: ApiError = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(error.error ?? `API error: ${response.statusText}`);
     }
 
     return response.json();
@@ -111,4 +114,3 @@ class ApiClient implements ApiClientPort {
 }
 
 export const apiClient = new ApiClient();
-
