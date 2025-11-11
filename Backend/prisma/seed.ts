@@ -1,89 +1,85 @@
 // prisma/seed.ts
-import "../src/config/env.js"; // load global .env (adjust if your path differs)
-import { PrismaClient, Route, ShipCompliance, BankEntry, Pool, PoolMember } from "@prisma/client";
-import { faker } from "@faker-js/faker";
+import "../src/config/env.js";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
-  console.log("🌱 Starting TypeScript seed...");
+  console.log("🌱 Starting seed...");
 
-  // --- 1️⃣ ROUTES ---
-  const routes: Omit<Route, "id">[] = Array.from({ length: 50 }).map(() => ({
-    routeId: faker.string.alphanumeric(6).toUpperCase(),
-    year: faker.number.int({ min: 2015, max: 2025 }),
-    vesselType: faker.helpers.arrayElement(["Cargo", "Tanker", "Ferry", "Cruise", "Bulk"]),
-    fuelType: faker.helpers.arrayElement(["HFO", "MDO", "LNG", "Biofuel"]),
-    fuelConsumption: faker.number.int({ min: 500, max: 15000 }),
-    distance: faker.number.int({ min: 100, max: 20000 }),
-    totalEmissions: faker.number.int({ min: 1000, max: 200000 }),
-    ghgIntensity: parseFloat(
-      faker.number.float({ min: 60, max: 110, fractionDigits: 2 }).toFixed(2)
-    ),
-    isBaseline: false,
-  }));
+  // Clear existing data
+  await prisma.poolMember.deleteMany();
+  await prisma.pool.deleteMany();
+  await prisma.bankEntry.deleteMany();
+  await prisma.shipCompliance.deleteMany();
+  await prisma.route.deleteMany();
+  console.log("✅ Cleared existing data");
+
+  // --- ROUTES (from requirements) ---
+  const routes = [
+    {
+      routeId: "R001",
+      vesselType: "Container",
+      fuelType: "HFO",
+      year: 2024,
+      ghgIntensity: 91.0,
+      fuelConsumption: 5000,
+      distance: 12000,
+      totalEmissions: 4500,
+      isBaseline: true, // Set R001 as baseline
+    },
+    {
+      routeId: "R002",
+      vesselType: "BulkCarrier",
+      fuelType: "LNG",
+      year: 2024,
+      ghgIntensity: 88.0,
+      fuelConsumption: 4800,
+      distance: 11500,
+      totalEmissions: 4200,
+      isBaseline: false,
+    },
+    {
+      routeId: "R003",
+      vesselType: "Tanker",
+      fuelType: "MGO",
+      year: 2024,
+      ghgIntensity: 93.5,
+      fuelConsumption: 5100,
+      distance: 12500,
+      totalEmissions: 4700,
+      isBaseline: false,
+    },
+    {
+      routeId: "R004",
+      vesselType: "RoRo",
+      fuelType: "HFO",
+      year: 2025,
+      ghgIntensity: 89.2,
+      fuelConsumption: 4900,
+      distance: 11800,
+      totalEmissions: 4300,
+      isBaseline: false,
+    },
+    {
+      routeId: "R005",
+      vesselType: "Container",
+      fuelType: "LNG",
+      year: 2025,
+      ghgIntensity: 90.5,
+      fuelConsumption: 4950,
+      distance: 11900,
+      totalEmissions: 4400,
+      isBaseline: false,
+    },
+  ];
 
   await prisma.route.createMany({ data: routes });
-  console.log("✅ Inserted 50 Routes");
+  console.log("✅ Inserted 5 Routes (R001-R005)");
 
-  const baseline = await prisma.route.findFirst();
-  if (baseline) {
-    await prisma.route.update({ where: { id: baseline.id }, data: { isBaseline: true } });
-    console.log(`✅ Set Route ID ${baseline.id} as baseline`);
-  }
-
-  // --- 2️⃣ SHIP COMPLIANCE ---
-  const compliances: Omit<ShipCompliance, "id">[] = Array.from({ length: 50 }).map(() => ({
-    shipId: faker.string.alphanumeric(5).toUpperCase(),
-    year: faker.number.int({ min: 2015, max: 2025 }),
-    cbGco2eq: parseFloat(
-      faker.number.float({ min: -5000, max: 5000, fractionDigits: 2 }).toFixed(2)
-    ),
-  }));
-
-  await prisma.shipCompliance.createMany({ data: compliances });
-  console.log("✅ Inserted 50 ShipCompliance records");
-
-  // --- 3️⃣ BANK ENTRIES ---
-  const bankEntries: Omit<BankEntry, "id">[] = Array.from({ length: 50 }).map(() => ({
-    shipId: faker.string.alphanumeric(5).toUpperCase(),
-    year: faker.number.int({ min: 2015, max: 2025 }),
-    amountGco2eq: parseFloat(
-      faker.number.float({ min: -1000, max: 2000, fractionDigits: 2 }).toFixed(2)
-    ),
-  }));
-
-  await prisma.bankEntry.createMany({ data: bankEntries });
-  console.log("✅ Inserted 50 BankEntry records");
-
-  // --- 4️⃣ POOLS ---
-  const pools: Omit<Pool, "id" | "members">[] = Array.from({ length: 50 }).map(() => ({
-    year: faker.number.int({ min: 2015, max: 2025 }),
-    createdAt: faker.date.recent(),
-  }));
-
-  const createdPools = await Promise.all(pools.map((p) => prisma.pool.create({ data: p })));
-  console.log("✅ Inserted 50 Pools");
-
-  // --- 5️⃣ POOL MEMBERS ---
-  const poolMembers: Omit<PoolMember, "id">[] = Array.from({ length: 50 }).map(() => ({
-    poolId: faker.helpers.arrayElement(createdPools).id,
-    shipId: faker.string.alphanumeric(5).toUpperCase(),
-    cbBefore: parseFloat(
-      faker.number.float({ min: -2000, max: 2000, fractionDigits: 2 }).toFixed(2)
-    ),
-    cbAfter: parseFloat(
-      faker.number.float({ min: -2000, max: 2000, fractionDigits: 2 }).toFixed(2)
-    ),
-  }));
-
-  await prisma.poolMember.createMany({ data: poolMembers });
-  console.log("✅ Inserted 50 PoolMembers");
-
-  console.log("🌿 Seed complete — all tables populated!");
+  console.log("🌿 Seed complete!");
 }
 
-// --- Run safely with proper cleanup ---
 main()
   .then(async () => {
     await prisma.$disconnect();

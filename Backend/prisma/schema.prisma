@@ -34,6 +34,7 @@ model ShipCompliance {
   shipId    String
   year      Int
   cbGco2eq  Float
+  @@unique([shipId, year])
 }
 
 model BankEntry {
