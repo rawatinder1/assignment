@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { IconInfoCircle, IconRoute, IconFilter } from "@tabler/icons-react";
+import { IconInfoCircle, IconRoute, IconFilter, IconFilterOff } from "@tabler/icons-react";
 
 interface Route {
   id: number;
@@ -20,7 +20,7 @@ interface Route {
 }
 
 export default function RoutesPage() {
-  const [routes, setRoutes] = useState<Route[]>([]);
+  const [allRoutes, setAllRoutes] = useState<Route[]>([]); // Store all routes
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<{
@@ -33,12 +33,14 @@ export default function RoutesPage() {
   const [fuelTypes, setFuelTypes] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
 
+  // Load all routes once on mount
   const loadRoutes = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getRoutes(filters);
-      setRoutes(data);
+      const data = await api.getRoutes(); // Fetch all routes without filters
+
+      setAllRoutes(data);
 
       // Extract unique values for filters
       const uniqueVesselTypes = [...new Set(data.map((r: Route) => r.vesselType))].sort();
@@ -48,8 +50,6 @@ export default function RoutesPage() {
       setVesselTypes(uniqueVesselTypes);
       setFuelTypes(uniqueFuelTypes);
       setYears(uniqueYears);
-      
-      toast.success(`Loaded ${data.length} routes`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to load routes";
       setError(errorMsg);
@@ -59,24 +59,40 @@ export default function RoutesPage() {
     }
   };
 
+  // Load routes once on mount
   useEffect(() => {
     void loadRoutes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, []);
+
+  // Filter routes on the client side (instant, no API calls)
+  const filteredRoutes = allRoutes.filter((route) => {
+    if (filters.vesselType && route.vesselType !== filters.vesselType) return false;
+    if (filters.fuelType && route.fuelType !== filters.fuelType) return false;
+    if (filters.year && route.year !== filters.year) return false;
+    return true;
+  });
 
   const handleSetBaseline = async (routeId: number) => {
     try {
       await api.setBaseline(routeId);
       toast.success("Baseline updated successfully");
-      await loadRoutes();
+      
+      // Optimistic update: Update local state immediately
+      setAllRoutes(prevRoutes => 
+        prevRoutes.map(r => ({
+          ...r,
+          isBaseline: r.id === routeId
+        }))
+      );
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to set baseline";
-      setError(errorMsg);
       toast.error(errorMsg);
+      // Revert on error
+      await loadRoutes();
     }
   };
 
-  if (loading && routes.length === 0) {
+  if (loading && allRoutes.length === 0) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -90,10 +106,18 @@ export default function RoutesPage() {
     );
   }
 
+  const hasActiveFilters = filters.vesselType || filters.fuelType || filters.year;
+
+  const clearFilters = () => {
+    setFilters({});
+  };
+
   return (
-    <TooltipProvider>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-24">
-        <div className="container mx-auto p-6 space-y-6 max-w-7xl">
+    <>
+      <Toaster position="top-right" richColors />
+      <TooltipProvider>
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-24">
+          <div className="container mx-auto p-6 space-y-6 max-w-7xl">
           {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-6">
@@ -109,16 +133,30 @@ export default function RoutesPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="font-medium">{routes.length}</span>
-                <span>routes</span>
+                <span className="font-medium">{filteredRoutes.length}</span>
+                <span>{filteredRoutes.length === allRoutes.length ? 'routes' : `of ${allRoutes.length} routes`}</span>
               </div>
             </div>
 
             {/* Filters */}
             <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-              <div className="flex items-center gap-2 mb-3">
-                <IconFilter className="w-4 h-4 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">Filters</span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <IconFilter className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Filters</span>
+                  {hasActiveFilters && (
+                    <span className="text-xs text-gray-500">({filteredRoutes.length} results)</span>
+                  )}
+                </div>
+                {hasActiveFilters && (
+                  <button
+                    onClick={clearFilters}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white rounded-lg border border-gray-300 hover:border-gray-400 transition-all"
+                  >
+                    <IconFilterOff className="w-3.5 h-3.5" />
+                    Clear Filters
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -223,7 +261,18 @@ export default function RoutesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {routes.map((route) => (
+                  {filteredRoutes.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center gap-2 text-gray-500">
+                          <IconFilter className="w-12 h-12 text-gray-300" />
+                          <p className="text-sm font-medium">No routes found</p>
+                          <p className="text-xs">Try adjusting your filters</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRoutes.map((route) => (
                     <tr
                       key={route.id}
                       className={`hover:bg-gray-50 transition-colors ${
@@ -272,13 +321,15 @@ export default function RoutesPage() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
+          </div>
         </div>
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </>
   );
 }

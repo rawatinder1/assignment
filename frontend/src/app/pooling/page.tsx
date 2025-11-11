@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { IconInfoCircle, IconUsers, IconCircleCheck, IconAlertCircle } from "@tabler/icons-react";
+import { toast, Toaster } from "sonner";
+import { IconUsers, IconCircleCheck, IconAlertCircle, IconTrash, IconPlus } from "@tabler/icons-react";
 
 interface PoolMember {
   shipId: string;
@@ -28,15 +27,25 @@ export default function PoolingPage() {
   const [loadingCB, setLoadingCB] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLoadCB = async () => {
-    if (!newShipId) {
-      toast.error("Please enter a Ship/Route ID");
+  const handleAddMember = async () => {
+    if (!newShipId || newShipId.trim() === "") {
+      toast.error("Please enter a Ship ID");
       return;
     }
+    
+    // Check if already added
+    if (members.some(m => m.shipId === newShipId)) {
+      toast.error(`${newShipId} is already in the pool`);
+      return;
+    }
+    
     try {
       setLoadingCB(true);
       setError(null);
+      
+      // Fetch adjusted CB for this ship
       const adjusted = await api.getAdjustedCB(newShipId, year);
+      
       setMembers([
         ...members,
         { shipId: newShipId, cbBefore: adjusted.cbAfter },
@@ -44,7 +53,7 @@ export default function PoolingPage() {
       setNewShipId("");
       toast.success(`Added ${newShipId} with CB: ${adjusted.cbAfter.toLocaleString()} gCO₂eq`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to get adjusted compliance balance";
+      const errorMsg = err instanceof Error ? err.message : "Failed to get compliance balance";
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -52,10 +61,9 @@ export default function PoolingPage() {
     }
   };
 
-  const handleRemoveMember = (index: number) => {
-    const removed = members[index];
-    setMembers(members.filter((_, i) => i !== index));
-    toast.success(`Removed ${removed?.shipId}`);
+  const handleRemoveMember = (shipId: string) => {
+    setMembers(members.filter(m => m.shipId !== shipId));
+    toast.success(`Removed ${shipId} from pool`);
   };
 
   const handleCreatePool = async () => {
@@ -63,20 +71,27 @@ export default function PoolingPage() {
       toast.error("Please add at least one member");
       return;
     }
+    
     if (!isValid) {
-      toast.error("Pool is invalid. Check pooling rules.");
+      toast.error("Pool invalid: Sum of CBs must be ≥ 0");
       return;
     }
     
     try {
       setLoading(true);
       setError(null);
+      
       const result = await api.createPool(
         year,
         members.map((m) => ({ shipId: m.shipId }))
       );
+      
       setPoolResult(result);
-      toast.success(`Pool created successfully! Pool ID: ${result.poolId}`);
+      toast.success(`Pool #${result.poolId} created successfully!`);
+      
+      // Clear form
+      setMembers([]);
+      setNewShipId("");
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to create pool";
       setError(errorMsg);
@@ -88,28 +103,41 @@ export default function PoolingPage() {
 
   const poolSum = members.reduce((sum, m) => sum + m.cbBefore, 0);
   const isValid = poolSum >= 0;
+  const surplusCount = members.filter(m => m.cbBefore > 0).length;
+  const deficitCount = members.filter(m => m.cbBefore < 0).length;
 
   return (
-    <TooltipProvider>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-24">
+    <>
+      <Toaster position="top-right" richColors />
+      <div className="min-h-screen bg-background pb-24">
         <div className="container mx-auto p-6 space-y-6 max-w-7xl">
           {/* Header */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-purple-500 rounded-lg">
-                <IconUsers className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-2xl font-semibold text-gray-900">Pool Configuration</h1>
-            </div>
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Pooling Management
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Create compliance pools between ships (Article 21)
+            </p>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Year
+          {error && (
+            <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
+              {error}
+            </div>
+          )}
+
+          {/* Year Selection */}
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h2 className="text-lg font-semibold mb-4">Pool Configuration</h2>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-muted-foreground">
+                Year:
               </label>
               <select
                 value={year}
                 onChange={(e) => setYear(parseInt(e.target.value))}
-                className="w-full md:w-48 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value={2024}>2024</option>
                 <option value={2025}>2025</option>
@@ -118,198 +146,182 @@ export default function PoolingPage() {
             </div>
           </div>
 
-          {/* Pool Members Section */}
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <IconUsers className="w-5 h-5 text-purple-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Pool Members</h2>
-              <Tooltip>
-                <TooltipTrigger>
-                  <IconInfoCircle className="w-4 h-4 text-gray-400" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  Add ships to create a compliance pool
-                </TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-              <div className="lg:col-span-5">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ship/Route ID
-                </label>
-                <select
+          {/* Add Member Form */}
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h2 className="text-lg font-semibold mb-4">Add Ships to Pool</h2>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <input
+                  type="text"
                   value={newShipId}
                   onChange={(e) => setNewShipId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                >
-                  <option value="">Select ship...</option>
-                  <option value="R001">R001</option>
-                  <option value="R002">R002</option>
-                  <option value="R003">R003</option>
-                  <option value="R004">R004</option>
-                  <option value="R005">R005</option>
-                </select>
+                  onKeyDown={(e) => e.key === "Enter" && void handleAddMember()}
+                  placeholder="Enter ship ID (e.g., R001)"
+                  disabled={loadingCB}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                />
               </div>
-
-              <div className="lg:col-span-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CB Before (gCO₂eq)
-                </label>
-                <div className="px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 text-gray-500">
-                  {members.length > 0 && newShipId ? '0' : '0'}
-                </div>
-              </div>
-
-              <div className="lg:col-span-3 flex gap-2">
-                <button
-                  onClick={handleLoadCB}
-                  disabled={loadingCB || !newShipId}
-                  className="flex-1 py-3 px-4 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-                >
-                  {loadingCB ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Loading...
-                    </span>
-                  ) : (
-                    "Load CB"
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={handleAddMember}
+                disabled={loadingCB || !newShipId}
+                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingCB ? (
+                  <>
+                    <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <IconPlus className="w-4 h-4" />
+                    Add Ship
+                  </>
+                )}
+              </button>
             </div>
-
-            {/* Add Member Button */}
-            <button
-              onClick={handleLoadCB}
-              disabled={loadingCB || !newShipId}
-              className="mt-4 flex items-center gap-2 py-2 px-4 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
-            >
-              <span className="text-lg">+</span> Add Member
-            </button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Ships will be fetched with their adjusted CB (after banking)
+            </p>
           </div>
 
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className={`rounded-2xl shadow-lg border p-6 relative overflow-hidden ${
-              isValid 
-                ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200' 
-                : 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200'
-            }`}>
-              <div className={`absolute top-4 right-4 p-2 rounded-lg ${
-                isValid ? 'bg-emerald-500/20' : 'bg-gray-500/20'
-              }`}>
-                {isValid ? (
-                  <IconCircleCheck className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <span className="text-gray-600">○</span>
-                )}
-              </div>
-              <div className={`text-xs font-medium uppercase tracking-wider mb-2 ${
-                isValid ? 'text-emerald-600' : 'text-gray-600'
-              }`}>
-                Pool Sum
-              </div>
-              <div className={`text-3xl font-bold mb-1 ${
-                isValid ? 'text-emerald-700' : 'text-gray-700'
-              }`}>
-                {poolSum.toLocaleString()}
-              </div>
-              <div className={`text-xs ${
-                isValid ? 'text-emerald-600/70' : 'text-gray-600/70'
-              }`}>
-                gCO₂eq
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl shadow-lg border border-purple-200 p-6 relative overflow-hidden">
-              <div className="absolute top-4 right-4 p-2 bg-purple-500/20 rounded-lg">
-                <IconUsers className="w-5 h-5 text-purple-600" />
-              </div>
-              <div className="text-xs font-medium text-purple-600 uppercase tracking-wider mb-2">
-                Members
-              </div>
-              <div className="text-3xl font-bold text-purple-700 mb-1">
-                {members.length}
-              </div>
-              <div className="text-xs text-purple-600/70">
-                {members.length === 1 ? 'ship' : 'ships'}
-              </div>
-            </div>
-
-            <div className={`rounded-2xl shadow-lg border p-6 relative overflow-hidden ${
-              isValid && members.length > 0
-                ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200'
-                : 'bg-gradient-to-br from-red-50 to-red-100 border-red-200'
-            }`}>
-              <div className={`absolute top-4 right-4 p-2 rounded-lg ${
-                isValid && members.length > 0 ? 'bg-emerald-500/20' : 'bg-red-500/20'
-              }`}>
-                {isValid && members.length > 0 ? (
-                  <IconCircleCheck className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <IconAlertCircle className="w-5 h-5 text-red-600" />
-                )}
-              </div>
-              <div className={`text-xs font-medium uppercase tracking-wider mb-2 ${
-                isValid && members.length > 0 ? 'text-emerald-600' : 'text-red-600'
-              }`}>
-                Status
-              </div>
-              <div className={`text-3xl font-bold mb-1 ${
-                isValid && members.length > 0 ? 'text-emerald-700' : 'text-red-700'
-              }`}>
-                {members.length === 0 ? 'No Members' : isValid ? 'Valid' : 'Invalid'}
-              </div>
-              <div className={`text-xs ${
-                isValid && members.length > 0 ? 'text-emerald-600/70' : 'text-red-600/70'
-              }`}>
-                {isValid && members.length > 0 ? 'Pool can be created' : 'Check requirements'}
-              </div>
-            </div>
-          </div>
-
-          {/* Members List */}
           {members.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Current Pool Members</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Pool Sum
+                </div>
+                <div className={`text-2xl font-bold ${isValid ? 'text-green-600' : 'text-red-600'}`}>
+                  {poolSum.toLocaleString()}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">gCO₂eq</div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Total Ships
+                </div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {members.length}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">in pool</div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Surplus Ships
+                </div>
+                <div className="text-2xl font-bold text-green-600">
+                  {surplusCount}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">CB &gt; 0</div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Deficit Ships
+                </div>
+                <div className="text-2xl font-bold text-red-600">
+                  {deficitCount}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">CB &lt; 0</div>
+              </div>
+            </div>
+          )}
+
+          {/* Validation Status */}
+          {members.length > 0 && (
+            <div className={`rounded-lg border p-4 ${
+              isValid
+                ? 'border-green-500/50 bg-green-50'
+                : 'border-destructive bg-destructive/10'
+            }`}>
+              <div className="flex items-center gap-3">
+                {isValid ? (
+                  <>
+                    <IconCircleCheck className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-green-900">
+                        Pool is valid and can be created
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        Sum of compliance balances: {poolSum.toLocaleString()} gCO₂eq ≥ 0 ✓
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <IconAlertCircle className="w-5 h-5 text-destructive" />
+                    <div>
+                      <p className="text-sm font-semibold text-destructive">
+                        Pool is invalid
+                      </p>
+                      <p className="text-xs text-destructive/80 mt-1">
+                        Sum of CBs ({poolSum.toLocaleString()} gCO₂eq) must be ≥ 0
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Members Table */}
+          {members.length > 0 && (
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="p-4 border-b border-border">
+                <h2 className="text-lg font-semibold">Pool Members</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {members.length} {members.length === 1 ? 'ship' : 'ships'} in pool
+                </p>
               </div>
               
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="bg-muted/50">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Ship/Route ID
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Ship ID
                       </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         CB Before (gCO₂eq)
                       </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {members.map((member, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                  <tbody className="divide-y divide-border">
+                    {members.map((member) => (
+                      <tr key={member.shipId} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 text-sm font-medium">
                           {member.shipId}
                         </td>
-                        <td className={`px-6 py-4 text-sm font-semibold ${
-                          member.cbBefore >= 0 ? 'text-emerald-600' : 'text-red-600'
+                        <td className={`px-4 py-3 text-sm font-semibold ${
+                          member.cbBefore >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>
                           {member.cbBefore.toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 text-sm">
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            member.cbBefore > 0
+                              ? 'bg-green-100 text-green-700'
+                              : member.cbBefore < 0
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {member.cbBefore > 0 ? 'Surplus' : member.cbBefore < 0 ? 'Deficit' : 'Balanced'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
                           <button
-                            onClick={() => handleRemoveMember(index)}
-                            className="text-red-600 hover:text-red-800 font-medium transition-colors"
+                            onClick={() => handleRemoveMember(member.shipId)}
+                            className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 font-medium transition-colors"
                           >
+                            <IconTrash className="w-4 h-4" />
                             Remove
                           </button>
                         </td>
@@ -323,43 +335,47 @@ export default function PoolingPage() {
 
           {/* Pool Result */}
           {poolResult && (
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <IconCircleCheck className="w-5 h-5 text-emerald-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Pool Created Successfully</h2>
+            <div className="rounded-lg border border-green-500/50 bg-green-50 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <IconCircleCheck className="w-6 h-6 text-green-600" />
+                <h2 className="text-lg font-semibold text-green-900">Pool Created Successfully!</h2>
               </div>
 
-              <div className="space-y-3 mb-6">
-                <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                  <span className="text-sm text-gray-600">Pool ID:</span>
-                  <span className="text-sm font-semibold text-gray-900">{poolResult.poolId}</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="rounded-lg bg-white p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Pool ID</div>
+                  <div className="text-xl font-bold text-primary">#{poolResult.poolId}</div>
                 </div>
-                <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                  <span className="text-sm text-gray-600">Year:</span>
-                  <span className="text-sm font-semibold text-gray-900">{poolResult.year}</span>
+                <div className="rounded-lg bg-white p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Year</div>
+                  <div className="text-xl font-bold">{poolResult.year}</div>
                 </div>
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-sm text-gray-600">Pool Sum:</span>
-                  <span className="text-sm font-semibold text-emerald-600">
+                <div className="rounded-lg bg-white p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Pool Sum</div>
+                  <div className="text-xl font-bold text-green-600">
                     {poolResult.poolSum.toLocaleString()} gCO₂eq
-                  </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="text-sm font-medium text-gray-700 mb-3">Members After Pooling:</div>
+              <div className="rounded-lg bg-white p-4">
+                <h3 className="text-sm font-semibold mb-3">Final Allocation (After Pooling)</h3>
                 <div className="space-y-2">
-                  {poolResult.members.map((member, index) => (
+                  {poolResult.members.map((member) => (
                     <div
-                      key={index}
-                      className="flex justify-between items-center py-2 px-3 bg-white rounded-lg"
+                      key={member.shipId}
+                      className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-md"
                     >
-                      <span className="text-sm font-medium text-gray-900">{member.shipId}</span>
-                      <span className={`text-sm font-semibold ${
-                        member.cbAfter >= 0 ? 'text-emerald-600' : 'text-red-600'
-                      }`}>
-                        {member.cbAfter.toLocaleString()} gCO₂eq
-                      </span>
+                      <span className="text-sm font-medium">{member.shipId}</span>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className={member.cbBefore >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          Before: {member.cbBefore.toLocaleString()}
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className={`font-semibold ${member.cbAfter >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          After: {member.cbAfter.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -367,55 +383,30 @@ export default function PoolingPage() {
             </div>
           )}
 
-          {/* Pooling Rules */}
-          <div className="bg-blue-50 rounded-2xl shadow-sm border border-blue-200 p-6">
-            <h3 className="text-base font-semibold text-blue-900 mb-4">
-              Pooling Rules (Article 21)
-            </h3>
-            <ul className="space-y-2 text-sm text-blue-800">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Pool sum (Σ CB) must be ≥ 0</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Deficit ships cannot exit worse than before</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Surplus ships cannot exit with negative CB</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600 mt-0.5">•</span>
-                <span>Greedy allocation: transfers from surplus to deficit</span>
-              </li>
-            </ul>
-          </div>
-
           {/* Create Pool Button */}
           {members.length > 0 && !poolResult && (
             <div className="flex justify-end">
               <button
                 onClick={handleCreatePool}
                 disabled={loading || !isValid}
-                className="py-3 px-8 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all disabled:bg-gray-300 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                className="rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
+                    <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
                     Creating Pool...
                   </span>
                 ) : (
-                  "Create Pool"
+                  <>
+                    <IconUsers className="inline w-4 h-4 mr-2" />
+                    Create Pool
+                  </>
                 )}
               </button>
             </div>
           )}
         </div>
       </div>
-    </TooltipProvider>
+    </>
   );
 }
