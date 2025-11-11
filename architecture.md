@@ -1,7 +1,7 @@
 # Technical Architecture Deep Dive
 
 *If you're the kind of person who wants to know exactly how everything fits together under the hood, this doc is for you.*
-![Uploading svgviewer-png-output.png…]()
+
 
 ## Architecture Overview: Why Hexagonal?
 
