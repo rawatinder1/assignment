@@ -1,7 +1,7 @@
 // src/adapters/outbound/postgres/PrismaRouteRepository.ts
 import { prisma } from "../../../infrastructure/db/prisma.js";
 import type { RouteRepositoryPort } from "../../../core/ports/RouteRepositoryPort.js";
-
+// this looks correct will keep it.
 export class PrismaRouteRepository implements RouteRepositoryPort {
   async getAll(filters?: { vesselType?: string; fuelType?: string; year?: number }) {
     const where: any = {};

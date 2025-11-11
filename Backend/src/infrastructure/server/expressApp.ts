@@ -1,5 +1,6 @@
 // src/infrastructure/server/expressApp.ts
 import express from "express";
+import cors from "cors";
 import { PrismaRouteRepository } from "../../adapters/outbound/postgres/PrismaRouteRepository.js";
 import { PrismaComplianceRepository } from "../../adapters/outbound/postgres/PrismaComplianceRepository.js";
 import { PrismaBankRepository } from "../../adapters/outbound/postgres/PrismaBankRepository.js";
@@ -11,6 +12,13 @@ import { createPoolingController } from "../../adapters/inbound/http/poolingCont
 
 export function createApp() {
   const app = express();
+
+  // CORS middleware - allow all origins for development
+  app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }));
 
   // Middleware
   app.use(express.json());

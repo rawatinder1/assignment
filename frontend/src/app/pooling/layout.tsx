@@ -1,7 +1,6 @@
+// src/app/pooling/layout.tsx
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { FloatingDock } from "@/components/ui/floating-dock";
 import {
   IconRoute,
@@ -33,23 +32,19 @@ const dockItems = [
   },
 ];
 
-export default function HomePage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.push("/routes");
-  }, [router]);
-
+export default function PoolingLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <main className="flex-1 flex items-center justify-center">
-        <div className="text-muted-foreground text-lg">Loading dashboard...</div>
-      </main>
+    <>
+      {children}
       <FloatingDock
         items={dockItems}
         desktopClassName="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
         mobileClassName="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
       />
-    </div>
+    </>
   );
 }

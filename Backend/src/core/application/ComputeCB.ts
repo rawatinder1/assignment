@@ -11,7 +11,7 @@ export async function computeCB(
 ) {
   // Get all routes for this ship (using routeId as shipId for now)
   const routes = await routeRepo.getAll();
-  const shipRoutes = routes.filter((r) => r.routeId === shipId && r.year === year);
+  const shipRoutes = routes.filter((r) => r.id === Number(shipId) && r.year === year);
 
   if (shipRoutes.length === 0) {
     throw new Error(`No routes found for ship ${shipId} in year ${year}`);
