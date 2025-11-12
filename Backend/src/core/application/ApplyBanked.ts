@@ -23,7 +23,7 @@ export async function applyBanked(
     throw new Error(`No compliance balance found for ship ${shipId} in year ${year}`);
   }
 
-  // Get available banked amount (sum of positive entries)
+  // Get available banked amount (net: positive entries - negative entries)
   const availableBanked = await bankRepo.getBankedAmount(shipId, year);
   if (amount > availableBanked) {
     throw new Error(

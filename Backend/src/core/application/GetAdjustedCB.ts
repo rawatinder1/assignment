@@ -20,8 +20,8 @@ export async function getAdjustedCB(
     throw new Error(`No compliance balance found for ship ${shipId} in year ${year}`);
   }
 
-  // Get available banked amount (sum of positive entries only)
-  // This is the amount that can be applied
+  // Get available banked amount (net: positive entries - negative entries)
+  // This is the net amount that can be applied (after accounting for previous applications)
   const bankedAmount = await bankRepo.getBankedAmount(shipId, year);
 
   // Adjusted CB = base CB + available banked amount

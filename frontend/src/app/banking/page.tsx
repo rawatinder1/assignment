@@ -11,9 +11,17 @@ interface BankRecord {
   amountGco2eq: number;
 }
 
+interface Route {
+  id: number;
+  routeId: string;
+  year: number;
+  vesselType: string;
+  fuelType: string;
+}
+
 export default function BankingPage() {
   const [shipId, setShipId] = useState("");
-  const [year, setYear] = useState<number>(2024);
+  const [year, setYear] = useState<number | null>(null);
   const [cb, setCb] = useState<number | null>(null);
   const [adjustedCb, setAdjustedCb] = useState<number | null>(null);
   const [bankedAmount, setBankedAmount] = useState<number>(0);
@@ -22,6 +30,58 @@ export default function BankingPage() {
   const [bankRecords, setBankRecords] = useState<BankRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Ship ID and year management
+  const [allRoutes, setAllRoutes] = useState<Route[]>([]);
+  const [availableShipIds, setAvailableShipIds] = useState<string[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [loadingRoutes, setLoadingRoutes] = useState(true);
+
+  // Load all routes on mount to get ship IDs and years
+  useEffect(() => {
+    const loadRoutes = async () => {
+      try {
+        setLoadingRoutes(true);
+        const routes = await api.getRoutes();
+        setAllRoutes(routes);
+        
+        // Extract unique ship IDs (route id values, not routeId string)
+        // shipId is the numeric route.id (1, 2, 4, etc.)
+        const uniqueShipIds = [...new Set(routes.map((r: Route) => r.id.toString()))].sort((a, b) => parseInt(a) - parseInt(b));
+        setAvailableShipIds(uniqueShipIds);
+      } catch (err) {
+        console.error("Failed to load routes:", err);
+        toast.error("Failed to load ship data");
+      } finally {
+        setLoadingRoutes(false);
+      }
+    };
+    
+    void loadRoutes();
+  }, []);
+
+  // Update available years when shipId changes
+  useEffect(() => {
+    if (shipId) {
+      const shipIdNum = parseInt(shipId);
+      const yearsForShip = allRoutes
+        .filter((r) => r.id === shipIdNum)
+        .map((r) => r.year)
+        .filter((y, i, arr) => arr.indexOf(y) === i) // Get unique years
+        .sort((a, b) => b - a); // Sort descending (most recent first)
+      
+      setAvailableYears(yearsForShip);
+      
+      // Auto-select the most recent year when shipId is selected
+      if (yearsForShip.length > 0 && (!year || !yearsForShip.includes(year))) {
+        setYear(yearsForShip[0]);
+      }
+    } else {
+      setAvailableYears([]);
+      setYear(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipId, allRoutes]);
 
   // Auto-load data when shipId and year change (debounced)
   useEffect(() => {
@@ -174,30 +234,59 @@ export default function BankingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-2">
-                Ship/Route ID
+                Ship ID
               </label>
-              <input
-                type="text"
-                value={shipId}
-                onChange={(e) => setShipId(e.target.value)}
-                placeholder="Enter ship ID"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              {loadingRoutes ? (
+                <div className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground">
+                  Loading ships...
+                </div>
+              ) : (
+                <select
+                  value={shipId}
+                  onChange={(e) => setShipId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Select a ship...</option>
+                  {availableShipIds.map((id) => {
+                    const route = allRoutes.find((r) => r.id === parseInt(id));
+                    return (
+                      <option key={id} value={id}>
+                        {id} {route ? `(${route.routeId})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
               <p className="text-xs text-muted-foreground mt-1">
-                Example: R001, R002, etc.
+                {availableShipIds.length > 0 
+                  ? `${availableShipIds.length} ship(s) available`
+                  : "No ships found"}
               </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-2">
                 Year
               </label>
-              <input
-                type="number"
-                value={year}
-                onChange={(e) => setYear(parseInt(e.target.value) || 2024)}
-                placeholder="2024"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              <select
+                value={year || ""}
+                onChange={(e) => setYear(e.target.value ? parseInt(e.target.value) : null)}
+                disabled={!shipId || availableYears.length === 0}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">{shipId ? "Select a year..." : "Select ship first"}</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {shipId && availableYears.length > 0
+                  ? `${availableYears.length} year(s) available for ${shipId}`
+                  : shipId
+                  ? "No years found for this ship"
+                  : "Select a ship to see available years"}
+              </p>
             </div>
           </div>
         </div>

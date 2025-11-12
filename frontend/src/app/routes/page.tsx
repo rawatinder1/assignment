@@ -32,6 +32,7 @@ export default function RoutesPage() {
   const [vesselTypes, setVesselTypes] = useState<string[]>([]);
   const [fuelTypes, setFuelTypes] = useState<string[]>([]);
   const [years, setYears] = useState<number[]>([]);
+  const [settingBaseline, setSettingBaseline] = useState<number | null>(null); // Track which route is being set as baseline
 
   // Load all routes once on mount
   const loadRoutes = async () => {
@@ -74,8 +75,9 @@ export default function RoutesPage() {
 
   const handleSetBaseline = async (routeId: number) => {
     try {
-      await api.setBaseline(routeId);
-      toast.success("Baseline updated successfully");
+      setSettingBaseline(routeId); // Start loading state
+      const result = await api.setBaseline(routeId);
+      toast.success(result.message || "Baseline updated successfully");
       
       // Optimistic update: Update local state immediately
       setAllRoutes(prevRoutes => 
@@ -89,6 +91,8 @@ export default function RoutesPage() {
       toast.error(errorMsg);
       // Revert on error
       await loadRoutes();
+    } finally {
+      setSettingBaseline(null); // Clear loading state
     }
   };
 
@@ -116,7 +120,21 @@ export default function RoutesPage() {
     <>
       <Toaster position="top-right" richColors />
       <TooltipProvider>
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-24">
+        <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-24 relative ${settingBaseline !== null ? 'overflow-hidden' : ''}`}>
+          {/* Loading Overlay */}
+          {settingBaseline !== null && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4 min-w-[280px]">
+                <div className="relative">
+                  <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-gray-900">Setting Baseline</p>
+                  <p className="text-sm text-gray-600 mt-1">Please wait...</p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="container mx-auto p-6 space-y-6 max-w-7xl">
           {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -151,7 +169,8 @@ export default function RoutesPage() {
                 {hasActiveFilters && (
                   <button
                     onClick={clearFilters}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white rounded-lg border border-gray-300 hover:border-gray-400 transition-all"
+                    disabled={settingBaseline !== null}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white rounded-lg border border-gray-300 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <IconFilterOff className="w-3.5 h-3.5" />
                     Clear Filters
@@ -168,7 +187,8 @@ export default function RoutesPage() {
                     onChange={(e) =>
                       setFilters({ ...filters, vesselType: e.target.value === "" ? undefined : e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                    disabled={settingBaseline !== null}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">All Vessel Types</option>
                     {vesselTypes.map((vt) => (
@@ -188,7 +208,8 @@ export default function RoutesPage() {
                     onChange={(e) =>
                       setFilters({ ...filters, fuelType: e.target.value === "" ? undefined : e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                    disabled={settingBaseline !== null}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">All Fuel Types</option>
                     {fuelTypes.map((ft) => (
@@ -211,7 +232,8 @@ export default function RoutesPage() {
                         year: e.target.value ? parseInt(e.target.value) : undefined,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                    disabled={settingBaseline !== null}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="">All Years</option>
                     {years.map((y) => (
@@ -320,9 +342,17 @@ export default function RoutesPage() {
                         {!route.isBaseline && (
                           <button
                             onClick={() => handleSetBaseline(route.id)}
-                            className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md"
+                            disabled={settingBaseline !== null}
+                            className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
                           >
-                            Set Baseline
+                            {settingBaseline === route.id ? (
+                              <span className="flex items-center gap-2">
+                                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-white border-r-transparent"></span>
+                                Setting...
+                              </span>
+                            ) : (
+                              "Set Baseline"
+                            )}
                           </button>
                         )}
                       </td>
