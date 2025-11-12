@@ -73,8 +73,11 @@ export default function BankingPage() {
       setAvailableYears(yearsForShip);
       
       // Auto-select the most recent year when shipId is selected
-      if (yearsForShip.length > 0 && (!year || !yearsForShip.includes(year))) {
-        setYear(yearsForShip[0]);
+      if (yearsForShip.length > 0) {
+        const firstYear = yearsForShip[0];
+        if (firstYear !== undefined && (!year || !yearsForShip.includes(year))) {
+          setYear(firstYear);
+        }
       }
     } else {
       setAvailableYears([]);
