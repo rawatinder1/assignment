@@ -232,6 +232,9 @@ export default function RoutesPage() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Ship ID
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Route ID
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -263,7 +266,7 @@ export default function RoutesPage() {
                 <tbody className="divide-y divide-gray-200">
                   {filteredRoutes.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center">
+                      <td colSpan={10} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-2 text-gray-500">
                           <IconFilter className="w-12 h-12 text-gray-300" />
                           <p className="text-sm font-medium">No routes found</p>
@@ -279,6 +282,9 @@ export default function RoutesPage() {
                         route.isBaseline ? "bg-blue-50/50" : ""
                       }`}
                     >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {route.id}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-gray-900">{route.routeId}</span>

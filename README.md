@@ -276,7 +276,6 @@ I'll be honest - I need to add more tests. Right now I've been manually testing 
 
 - Unit tests for the business logic (Jest)
 - Integration tests for the API endpoints (Supertest)
-- E2E tests for the frontend (Playwright)
 
 If you want to contribute tests, that would be amazing! 🙏
 
@@ -298,8 +297,7 @@ Try `npm run type-check` to see what's wrong. Sometimes it's just a missing type
 
 This was my first time really diving into:
 - **Hexagonal architecture** - took a bit to wrap my head around, but now I get why people love it
-- **Prisma** - seriously so much better than raw SQL or older ORMs
-- **Next.js App Router** - the server actions are powerful but took some getting used to
+
 - **EU Maritime regulations** - learned way more about shipping emissions than I expected!
 
 The biggest lesson? Start with a solid architecture even if it feels like overkill. I refactored this thing twice before settling on hexagonal, and I wish I'd started there.
@@ -325,11 +323,8 @@ Found a bug? Have an idea? I'd love your help! Just:
 4. Write a commit message that explains what you did
 5. Push and open a PR
 
-I try to review PRs within a few days.
 
-## Questions?
 
-If something's not clear or you run into issues, open an issue on GitHub or reach out. I'm always happy to help!
 
 ## License
 
@@ -337,4 +332,4 @@ MIT - do whatever you want with this code. If you build something cool with it, 
 
 ---
 
-Built with ☕ and probably too much Stack Overflow.
+

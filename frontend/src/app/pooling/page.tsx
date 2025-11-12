@@ -5,10 +5,11 @@ import { api } from "@/lib/api";
 import { toast, Toaster } from "sonner";
 import { IconUsers, IconCircleCheck, IconAlertCircle, IconTrash, IconPlus } from "@tabler/icons-react";
 
-interface PoolMember {
+interface PoolMemberRow {
+  id: string;
   shipId: string;
-  cbBefore: number;
-  cbAfter?: number;
+  cbBefore: number | null;
+  loading: boolean;
 }
 
 interface PoolResult {
@@ -20,78 +21,106 @@ interface PoolResult {
 
 export default function PoolingPage() {
   const [year, setYear] = useState<number>(2024);
-  const [members, setMembers] = useState<PoolMember[]>([]);
-  const [newShipId, setNewShipId] = useState("");
+  const [memberRows, setMemberRows] = useState<PoolMemberRow[]>([
+    { id: '1', shipId: '', cbBefore: null, loading: false }
+  ]);
   const [poolResult, setPoolResult] = useState<PoolResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingCB, setLoadingCB] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAddMember = async () => {
-    if (!newShipId || newShipId.trim() === "") {
-      toast.error("Please enter a Ship ID");
+  const handleLoadCB = async (rowId: string) => {
+    const row = memberRows.find(r => r.id === rowId);
+    if (!row || !row.shipId || row.shipId.trim() === "") {
+      toast.error("Please select a Ship ID");
       return;
     }
-    
-    // Check if already added
-    if (members.some(m => m.shipId === newShipId)) {
-      toast.error(`${newShipId} is already in the pool`);
+
+    // Check if already loaded
+    if (row.cbBefore !== null) {
+      toast.info(`CB already loaded for ${row.shipId}`);
       return;
     }
-    
+
+    // Check for duplicates
+    const existingLoaded = memberRows.filter(r => r.cbBefore !== null && r.shipId === row.shipId);
+    if (existingLoaded.length > 0) {
+      toast.error(`${row.shipId} is already in the pool`);
+      return;
+    }
+
     try {
-      setLoadingCB(true);
+      setMemberRows(memberRows.map(r => 
+        r.id === rowId ? { ...r, loading: true } : r
+      ));
       setError(null);
-      
-      // Fetch adjusted CB for this ship
-      const adjusted = await api.getAdjustedCB(newShipId, year);
-      
-      setMembers([
-        ...members,
-        { shipId: newShipId, cbBefore: adjusted.cbAfter },
-      ]);
-      setNewShipId("");
-      toast.success(`Added ${newShipId} with CB: ${adjusted.cbAfter.toLocaleString()} gCO₂eq`);
+
+      const adjusted = await api.getAdjustedCB(row.shipId, year);
+
+      setMemberRows(memberRows.map(r =>
+        r.id === rowId ? { ...r, cbBefore: adjusted.cbAfter, loading: false } : r
+      ));
+
+      toast.success(`Loaded CB for ${row.shipId}: ${adjusted.cbAfter.toLocaleString()} gCO₂eq`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to get compliance balance";
+      const errorMsg = err instanceof Error ? err.message : "Failed to load CB";
       setError(errorMsg);
       toast.error(errorMsg);
-    } finally {
-      setLoadingCB(false);
+      setMemberRows(memberRows.map(r =>
+        r.id === rowId ? { ...r, loading: false } : r
+      ));
     }
   };
 
-  const handleRemoveMember = (shipId: string) => {
-    setMembers(members.filter(m => m.shipId !== shipId));
-    toast.success(`Removed ${shipId} from pool`);
+  const handleRemoveRow = (rowId: string) => {
+    if (memberRows.length === 1) {
+      toast.info("At least one row is required");
+      return;
+    }
+    const row = memberRows.find(r => r.id === rowId);
+    setMemberRows(memberRows.filter(r => r.id !== rowId));
+    if (row?.shipId) {
+      toast.success(`Removed ${row.shipId}`);
+    }
+  };
+
+  const handleAddRow = () => {
+    const newId = String(Date.now());
+    setMemberRows([...memberRows, { id: newId, shipId: '', cbBefore: null, loading: false }]);
+  };
+
+  const handleShipIdChange = (rowId: string, shipId: string) => {
+    setMemberRows(memberRows.map(r =>
+      r.id === rowId ? { ...r, shipId, cbBefore: null } : r
+    ));
   };
 
   const handleCreatePool = async () => {
-    if (members.length === 0) {
-      toast.error("Please add at least one member");
+    const loadedMembers = memberRows.filter(r => r.cbBefore !== null);
+
+    if (loadedMembers.length === 0) {
+      toast.error("Please load CB for at least one member");
       return;
     }
-    
+
     if (!isValid) {
       toast.error("Pool invalid: Sum of CBs must be ≥ 0");
       return;
     }
-    
+
     try {
       setLoading(true);
       setError(null);
-      
+
       const result = await api.createPool(
         year,
-        members.map((m) => ({ shipId: m.shipId }))
+        loadedMembers.map((m) => ({ shipId: m.shipId }))
       );
-      
+
       setPoolResult(result);
       toast.success(`Pool #${result.poolId} created successfully!`);
-      
-      // Clear form
-      setMembers([]);
-      setNewShipId("");
+
+      // Reset form
+      setMemberRows([{ id: String(Date.now()), shipId: '', cbBefore: null, loading: false }]);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to create pool";
       setError(errorMsg);
@@ -101,10 +130,11 @@ export default function PoolingPage() {
     }
   };
 
-  const poolSum = members.reduce((sum, m) => sum + m.cbBefore, 0);
+  const loadedMembers = memberRows.filter(r => r.cbBefore !== null);
+  const poolSum = loadedMembers.reduce((sum, m) => sum + (m.cbBefore ?? 0), 0);
   const isValid = poolSum >= 0;
-  const surplusCount = members.filter(m => m.cbBefore > 0).length;
-  const deficitCount = members.filter(m => m.cbBefore < 0).length;
+  const surplusCount = loadedMembers.filter(m => (m.cbBefore ?? 0) > 0).length;
+  const deficitCount = loadedMembers.filter(m => (m.cbBefore ?? 0) < 0).length;
 
   return (
     <>
@@ -114,10 +144,10 @@ export default function PoolingPage() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              Pooling Management
+              Pool Configuration
             </h1>
             <p className="text-muted-foreground mt-2">
-              Create compliance pools between ships (Article 21)
+              Add ships to pool and create compliance pools (Article 21)
             </p>
           </div>
 
@@ -129,69 +159,105 @@ export default function PoolingPage() {
 
           {/* Year Selection */}
           <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">Pool Configuration</h2>
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-muted-foreground">
-                Year:
-              </label>
-              <select
-                value={year}
-                onChange={(e) => setYear(parseInt(e.target.value))}
-                className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value={2024}>2024</option>
-                <option value={2025}>2025</option>
-                <option value={2026}>2026</option>
-              </select>
-            </div>
+            <h2 className="text-lg font-semibold mb-4">Year</h2>
+            <select
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className="w-48 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value={2024}>2024</option>
+              <option value={2025}>2025</option>
+              <option value={2026}>2026</option>
+            </select>
           </div>
 
-          {/* Add Member Form */}
+          {/* Pool Members */}
           <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">Add Ships to Pool</h2>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  value={newShipId}
-                  onChange={(e) => setNewShipId(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && void handleAddMember()}
-                  placeholder="Enter ship ID (e.g., R001)"
-                  disabled={loadingCB}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                />
-              </div>
-              <button
-                onClick={handleAddMember}
-                disabled={loadingCB || !newShipId}
-                className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loadingCB ? (
-                  <>
-                    <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <IconPlus className="w-4 h-4" />
-                    Add Ship
-                  </>
-                )}
-              </button>
+            <div className="flex items-center gap-2 mb-6">
+              <IconUsers className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Pool Members</h2>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Ships will be fetched with their adjusted CB (after banking)
-            </p>
+
+            <div className="space-y-4">
+              {memberRows.map((row) => (
+                <div key={row.id} className="grid grid-cols-12 gap-3 items-end">
+                  <div className="col-span-3">
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">
+                      Ship/Route ID
+                    </label>
+                    <input
+                      type="text"
+                      value={row.shipId}
+                      onChange={(e) => handleShipIdChange(row.id, e.target.value)}
+                      disabled={row.loading || row.cbBefore !== null}
+                      placeholder="Enter Ship ID"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    />
+                  </div>
+
+                  <div className="col-span-4">
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">
+                      CB Before (gCO₂eq)
+                    </label>
+                    <input
+                      type="text"
+                      value={row.cbBefore !== null ? row.cbBefore.toLocaleString() : ''}
+                      readOnly
+                      placeholder="—"
+                      className="w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-center font-medium"
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <button
+                      onClick={() => handleLoadCB(row.id)}
+                      disabled={row.loading || !row.shipId || row.cbBefore !== null}
+                      className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {row.loading ? "Loading..." : "Load CB"}
+                    </button>
+                  </div>
+
+                  <div className="col-span-3">
+                    <button
+                      onClick={() => handleRemoveRow(row.id)}
+                      disabled={memberRows.length === 1}
+                      className="w-full rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <IconTrash className="inline w-4 h-4 mr-1" />
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleAddRow}
+              className="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <IconPlus className="w-4 h-4" />
+              Add Member
+            </button>
           </div>
 
           {/* KPI Cards */}
-          {members.length > 0 && (
+          {loadedMembers.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="rounded-lg border border-border bg-card p-4">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Pool Sum
+              <div className={`rounded-lg border p-4 ${
+                isValid ? 'border-green-500 bg-green-50' : 'border-destructive bg-destructive/10'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {isValid ? (
+                    <IconCircleCheck className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <IconAlertCircle className="w-5 h-5 text-destructive" />
+                  )}
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Pool Sum
+                  </div>
                 </div>
-                <div className={`text-2xl font-bold ${isValid ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-2xl font-bold ${isValid ? 'text-green-600' : 'text-destructive'}`}>
                   {poolSum.toLocaleString()}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">gCO₂eq</div>
@@ -199,12 +265,12 @@ export default function PoolingPage() {
 
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Total Ships
+                  Members
                 </div>
                 <div className="text-2xl font-bold text-blue-600">
-                  {members.length}
+                  {loadedMembers.length}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">in pool</div>
+                <div className="text-xs text-muted-foreground mt-1">ships in pool</div>
               </div>
 
               <div className="rounded-lg border border-border bg-card p-4">
@@ -230,7 +296,7 @@ export default function PoolingPage() {
           )}
 
           {/* Validation Status */}
-          {members.length > 0 && (
+          {loadedMembers.length > 0 && (
             <div className={`rounded-lg border p-4 ${
               isValid
                 ? 'border-green-500/50 bg-green-50'
@@ -245,7 +311,7 @@ export default function PoolingPage() {
                         Pool is valid and can be created
                       </p>
                       <p className="text-xs text-green-700 mt-1">
-                        Sum of compliance balances: {poolSum.toLocaleString()} gCO₂eq ≥ 0 ✓
+                        Sum: {poolSum.toLocaleString()} gCO₂eq ≥ 0 ✓
                       </p>
                     </div>
                   </>
@@ -257,78 +323,11 @@ export default function PoolingPage() {
                         Pool is invalid
                       </p>
                       <p className="text-xs text-destructive/80 mt-1">
-                        Sum of CBs ({poolSum.toLocaleString()} gCO₂eq) must be ≥ 0
+                        Sum ({poolSum.toLocaleString()} gCO₂eq) must be ≥ 0
                       </p>
                     </div>
                   </>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* Members Table */}
-          {members.length > 0 && (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h2 className="text-lg font-semibold">Pool Members</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {members.length} {members.length === 1 ? 'ship' : 'ships'} in pool
-                </p>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Ship ID
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        CB Before (gCO₂eq)
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {members.map((member) => (
-                      <tr key={member.shipId} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 text-sm font-medium">
-                          {member.shipId}
-                        </td>
-                        <td className={`px-4 py-3 text-sm font-semibold ${
-                          member.cbBefore >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {member.cbBefore.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            member.cbBefore > 0
-                              ? 'bg-green-100 text-green-700'
-                              : member.cbBefore < 0
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {member.cbBefore > 0 ? 'Surplus' : member.cbBefore < 0 ? 'Deficit' : 'Balanced'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right">
-                          <button
-                            onClick={() => handleRemoveMember(member.shipId)}
-                            className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 font-medium transition-colors"
-                          >
-                            <IconTrash className="w-4 h-4" />
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
           )}
@@ -359,7 +358,7 @@ export default function PoolingPage() {
               </div>
 
               <div className="rounded-lg bg-white p-4">
-                <h3 className="text-sm font-semibold mb-3">Final Allocation (After Pooling)</h3>
+                <h3 className="text-sm font-semibold mb-3">Final Allocation</h3>
                 <div className="space-y-2">
                   {poolResult.members.map((member) => (
                     <div
@@ -384,7 +383,7 @@ export default function PoolingPage() {
           )}
 
           {/* Create Pool Button */}
-          {members.length > 0 && !poolResult && (
+          {loadedMembers.length > 0 && !poolResult && (
             <div className="flex justify-end">
               <button
                 onClick={handleCreatePool}

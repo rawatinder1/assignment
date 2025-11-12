@@ -28,13 +28,17 @@ export function createBankingController(
 
     async bank(req: Request, res: Response) {
       try {
-        const { shipId, year } = req.body;
+        const { shipId, year, amount } = req.body;
 
         if (!shipId || !year) {
           return res.status(400).json({ error: "shipId and year are required" });
         }
 
-        const result = await bankSurplus(complianceRepo, bankRepo, shipId, year);
+        if (!amount || typeof amount !== "number" || amount <= 0) {
+          return res.status(400).json({ error: "amount must be a positive number" });
+        }
+
+        const result = await bankSurplus(complianceRepo, bankRepo, shipId, year, amount);
         res.json(result);
       } catch (error) {
         res.status(400).json({ error: (error as Error).message });

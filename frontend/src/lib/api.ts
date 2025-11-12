@@ -70,10 +70,10 @@ export const api = {
     return fetchApi<any[]>(`/banking/records?shipId=${shipId}&year=${year}`);
   },
 
-  bankSurplus: async (shipId: string, year: number): Promise<{ shipId: string; year: number; cbBefore: number; banked: number; cbAfter: number }> => {
+  bankSurplus: async (shipId: string, year: number, amount: number): Promise<{ shipId: string; year: number; cbBefore: number; banked: number; cbAfter: number }> => {
     return fetchApi<{ shipId: string; year: number; cbBefore: number; banked: number; cbAfter: number }>("/banking/bank", {
       method: "POST",
-      body: JSON.stringify({ shipId, year }),
+      body: JSON.stringify({ shipId, year, amount }),
     });
   },
 
